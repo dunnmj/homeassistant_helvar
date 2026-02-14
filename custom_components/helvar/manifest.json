@@ -10,7 +10,7 @@
   "iot_class": "local_push",
   "loggers": ["aiohelvar"],
   "requirements": [
-    "aiohelvar @ git+https://github.com/ctrebler/aiohelvar@a596b2da53efa2875af3c68b5662f6c6365bbd36"
+    "aiohelvar @ git+https://github.com/dunnmj/aiohelvar@d808943f43509c9280e79c8fb2943c16ab999542"
   ],
   "ssdp": [],
   "version": "0.2.2",

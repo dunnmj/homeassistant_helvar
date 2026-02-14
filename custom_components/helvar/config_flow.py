@@ -1,4 +1,5 @@
 """Config flow for HelvarNet integration."""
+
 from __future__ import annotations
 
 import logging
@@ -82,7 +83,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
             )
 
-        _LOGGER.exception("Creating Helvar config entry")
+        _LOGGER.info("Creating Helvar config entry")
         return self.async_create_entry(title=info["title"], data=user_input)
 
 

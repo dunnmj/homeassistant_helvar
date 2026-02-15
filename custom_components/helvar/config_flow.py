@@ -18,8 +18,10 @@ from .const import (
     COLOR_MODE_MIREDS,
     COLOR_MODE_XY,
     CONF_COLOR_MODE,
+    CONF_FADE_TIME,
     CONF_HOST,
     CONF_PORT,
+    DEFAULT_FADE_TIME,
     DEFAULT_PORT,
     DOMAIN,
 )
@@ -46,6 +48,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
+
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> OptionsFlowHandler:
+        """Get the options flow for this handler."""
+        return OptionsFlowHandler(config_entry)
 
     def __init__(self):
         """Initialize the Helvar flow."""
@@ -164,3 +173,38 @@ class CannotConnect(HomeAssistantError):
 
 class InvalidAuth(HomeAssistantError):
     """Error to indicate there is invalid auth."""
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle Helvar options flow."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            # Convert seconds to centiseconds for storage
+            fade_seconds = user_input[CONF_FADE_TIME]
+            options = {CONF_FADE_TIME: int(fade_seconds * 100)}
+            return self.async_create_entry(title="", data=options)
+
+        # Convert stored centiseconds back to seconds for display
+        current_cs = self.config_entry.options.get(CONF_FADE_TIME, DEFAULT_FADE_TIME)
+        current_seconds = current_cs / 100.0
+
+        options_schema = vol.Schema(
+            {
+                vol.Required(CONF_FADE_TIME, default=current_seconds): vol.All(
+                    vol.Coerce(float), vol.Range(min=0, max=100)
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=options_schema,
+        )

@@ -25,5 +25,18 @@
       }
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "description": "Configure Helvar integration settings.",
+        "data": {
+          "fade_time": "Fade time (seconds)"
+        },
+        "data_description": {
+          "fade_time": "Fade time for light transitions. Increments of 0.01 are valid."
+        }
+      }
+    }
+  },
   "title": "HelvarNet"
 }

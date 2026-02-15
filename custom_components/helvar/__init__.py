@@ -1,4 +1,5 @@
 """The HelvarNet integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +13,7 @@ from homeassistant.helpers import config_validation as cv
 from .const import CONF_HOST, CONF_PORT, DEFAULT_PORT, DOMAIN
 from .router import HelvarRouter
 
-PLATFORMS = ["light", "select"]
+PLATFORMS = ["light"]
 
 CONFIG_SCHEMA = vol.Schema(
     {

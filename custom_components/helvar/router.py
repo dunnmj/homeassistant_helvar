@@ -59,10 +59,5 @@ class HelvarRouter:
                 self.config_entry, ["light"]
             ),
         )
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setups(
-                self.config_entry, ["select"]
-            ),
-        )
 
         return True

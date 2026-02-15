@@ -70,7 +70,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Initialize to discover devices and check for color lights
         try:
-            await router.initialize(discover_cluster=True)
+            await router.initialize(discover_cluster=True, lights_only=True)
         except Exception:
             _LOGGER.debug("Failed to initialize during config flow, continuing")
 

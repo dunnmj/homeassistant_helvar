@@ -1,4 +1,5 @@
 """Test fixtures for Helvar integration."""
+
 import pytest
 from unittest.mock import Mock, AsyncMock, MagicMock
 import aiohelvar
@@ -20,9 +21,14 @@ def mock_router():
     router = Mock()
     router.api = Mock()
     router.api.devices = Mock()
+    router.api.devices.devices = {}
     router.api.devices.get_light_devices = Mock(return_value=[])
     router.api.devices.register_subscription = Mock()
     router.api.devices.set_device_brightness = AsyncMock()
+    router.api.groups = Mock()
+    router.api.groups.groups = {}
+    router.api.groups.register_subscription = Mock()
+    router.api.groups.set_group_level = AsyncMock()
     return router
 
 
@@ -35,9 +41,11 @@ def mock_hass():
     # Mock async_create_task to prevent coroutines from being scheduled
     hass.async_create_task = Mock(return_value=None)
     hass.config_entries.async_forward_entry_setups = Mock(return_value=None)
+
     # async_forward_entry_unload needs to be async for asyncio.gather in unload
     async def mock_unload(*args, **kwargs):
         return True
+
     hass.config_entries.async_forward_entry_unload = mock_unload
     return hass
 

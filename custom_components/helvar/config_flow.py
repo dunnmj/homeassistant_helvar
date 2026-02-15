@@ -14,7 +14,15 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
-from .const import CONF_HOST, CONF_PORT, DEFAULT_PORT, DOMAIN
+from .const import (
+    COLOR_MODE_MIREDS,
+    COLOR_MODE_XY,
+    CONF_COLOR_MODE,
+    CONF_HOST,
+    CONF_PORT,
+    DEFAULT_PORT,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,6 +32,11 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
     }
 )
+
+COLOR_MODE_OPTIONS = {
+    COLOR_MODE_MIREDS: "Mireds (color temperature)",
+    COLOR_MODE_XY: "CX/CY (XY color space)",
+}
 
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -37,6 +50,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self):
         """Initialize the Helvar flow."""
         self.router: aiohelvar.Router | None = None
+        self._user_input: dict[str, Any] = {}
+        self._title: str = ""
+        self._has_color_lights: bool = False
 
     async def validate_input(
         self, hass: HomeAssistant, data: dict[str, Any]
@@ -51,6 +67,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await router.connect()
         except ConnectionError as initial_exception:
             raise CannotConnect() from initial_exception
+
+        # Initialize to discover devices and check for color lights
+        try:
+            await router.initialize(discover_cluster=True)
+        except Exception:
+            _LOGGER.debug("Failed to initialize during config flow, continuing")
 
         workgroup_name = router.workgroup_name
         self.router = router
@@ -83,8 +105,57 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
             )
 
+        self._user_input = user_input
+        self._title = info["title"]
+
+        # Check if there are any color control lights
+        if self.router:
+            color_lights = [
+                device
+                for device in self.router.devices.devices.values()
+                if device.is_color
+            ]
+            self._has_color_lights = len(color_lights) > 0
+
+            if self._has_color_lights:
+                light_names = [
+                    str(device.name or device.address) for device in color_lights
+                ]
+                _LOGGER.info(
+                    "Found %d color control lights: %s",
+                    len(color_lights),
+                    ", ".join(light_names),
+                )
+                return await self.async_step_color_mode()
+
+        # No color lights — create entry directly
         _LOGGER.info("Creating Helvar config entry")
-        return self.async_create_entry(title=info["title"], data=user_input)
+        return self.async_create_entry(title=self._title, data=self._user_input)
+
+    async def async_step_color_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Ask the user how color control lights should be controlled."""
+        if user_input is not None:
+            self._user_input[CONF_COLOR_MODE] = user_input[CONF_COLOR_MODE]
+            _LOGGER.info(
+                "Creating Helvar config entry with color mode: %s",
+                user_input[CONF_COLOR_MODE],
+            )
+            return self.async_create_entry(title=self._title, data=self._user_input)
+
+        color_mode_schema = vol.Schema(
+            {
+                vol.Required(CONF_COLOR_MODE, default=COLOR_MODE_MIREDS): vol.In(
+                    COLOR_MODE_OPTIONS
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="color_mode",
+            data_schema=color_mode_schema,
+        )
 
 
 class CannotConnect(HomeAssistantError):

@@ -1,4 +1,5 @@
 """Support for Helvar Groups and Scenes."""
+
 import logging
 
 import aiohelvar
@@ -31,6 +32,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
 class HelvarGroup(SelectEntity):
     """Representation of a Helvar Light."""
+
+    _attr_should_poll: bool = False
 
     def __init__(self, group: aiohelvar.groups.Group, router):
         """Initialize an HelvarLight."""

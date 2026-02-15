@@ -1,4 +1,5 @@
 """Helvar Router."""
+
 import logging
 
 import aiohelvar
@@ -40,7 +41,7 @@ class HelvarRouter:
 
         try:
             await router.connect()
-            await router.initialize()
+            await router.initialize(discover_cluster=True)
 
         except ConnectionError as err:
             _LOGGER.error("Error connecting to the Helvar router at %s", host)
@@ -54,10 +55,14 @@ class HelvarRouter:
         # self.sensor_manager = SensorManager(self)
 
         hass.async_create_task(
-            hass.config_entries.async_forward_entry_setups(self.config_entry, ["light"]),
+            hass.config_entries.async_forward_entry_setups(
+                self.config_entry, ["light"]
+            ),
         )
         hass.async_create_task(
-            hass.config_entries.async_forward_entry_setups(self.config_entry, ["select"]),
+            hass.config_entries.async_forward_entry_setups(
+                self.config_entry, ["select"]
+            ),
         )
 
         return True

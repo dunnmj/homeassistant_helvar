@@ -25,6 +25,8 @@ def mock_router():
     router.api.devices.get_light_devices = Mock(return_value=[])
     router.api.devices.register_subscription = Mock()
     router.api.devices.set_device_brightness = AsyncMock()
+    router.api.devices.set_device_colour_temperature = AsyncMock()
+    router.api.devices.set_device_xy_color = AsyncMock()
     router.api.groups = Mock()
     router.api.groups.groups = {}
     router.api.groups.register_subscription = Mock()

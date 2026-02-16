@@ -18,6 +18,7 @@ from .const import (
     COLOR_MODE_MIREDS,
     COLOR_MODE_XY,
     CONF_COLOR_MODE,
+    CONF_COLOR_MODES,
     CONF_FADE_TIME,
     CONF_HOST,
     CONF_PORT,
@@ -54,21 +55,24 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> OptionsFlowHandler:
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
     def __init__(self):
         """Initialize the Helvar flow."""
         self.router: aiohelvar.Router | None = None
         self._user_input: dict[str, Any] = {}
         self._title: str = ""
-        self._has_color_lights: bool = False
+        self._color_devices: list = []
+        self._color_modes: dict[str, str] = {}
+        self._color_device_index: int = 0
 
     async def validate_input(
         self, hass: HomeAssistant, data: dict[str, Any]
     ) -> dict[str, Any]:
         """Validate the user input allows us to connect.
 
-        Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
+        Data has the keys from STEP_USER_DATA_SCHEMA with values provided by
+        the user.
         """
         router = aiohelvar.Router((data[CONF_HOST]), data[CONF_PORT])
 
@@ -81,11 +85,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             await router.initialize(discover_cluster=True, lights_only=True)
         except Exception:
-            _LOGGER.debug("Failed to initialize during config flow, continuing")
+            _LOGGER.warning(
+                "Failed to discover devices during config flow; "
+                "color light detection may be incomplete"
+            )
 
         workgroup_name = router.workgroup_name
         self.router = router
-        # Return info that you want to store in the config entry.
         return {"title": workgroup_name}
 
     async def async_step_user(
@@ -117,24 +123,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._user_input = user_input
         self._title = info["title"]
 
-        # Check if there are any color control lights
+        # Collect color-capable devices for per-device mode selection
         if self.router:
-            color_lights = [
+            self._color_devices = [
                 device
                 for device in self.router.devices.devices.values()
                 if device.is_color
             ]
-            self._has_color_lights = len(color_lights) > 0
 
-            if self._has_color_lights:
-                light_names = [
-                    str(device.name or device.address) for device in color_lights
-                ]
+            if self._color_devices:
                 _LOGGER.info(
-                    "Found %d color control lights: %s",
-                    len(color_lights),
-                    ", ".join(light_names),
+                    "Found %d color control lights",
+                    len(self._color_devices),
                 )
+                self._color_device_index = 0
+                self._color_modes = {}
                 return await self.async_step_color_mode()
 
         # No color lights — create entry directly
@@ -144,14 +147,28 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_color_mode(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Ask the user how color control lights should be controlled."""
+        """Ask the user the color mode for each color-capable device."""
         if user_input is not None:
-            self._user_input[CONF_COLOR_MODE] = user_input[CONF_COLOR_MODE]
+            device = self._color_devices[self._color_device_index]
+            addr_key = str(device.address)
+            self._color_modes[addr_key] = user_input[CONF_COLOR_MODE]
+            self._color_device_index += 1
+
+            # If more color devices remain, show next device
+            if self._color_device_index < len(self._color_devices):
+                return await self.async_step_color_mode()
+
+            # All color devices configured — create entry
+            self._user_input[CONF_COLOR_MODES] = self._color_modes
             _LOGGER.info(
-                "Creating Helvar config entry with color mode: %s",
-                user_input[CONF_COLOR_MODE],
+                "Creating Helvar config entry with per-device color modes: %s",
+                self._color_modes,
             )
             return self.async_create_entry(title=self._title, data=self._user_input)
+
+        # Show form for the current color device
+        device = self._color_devices[self._color_device_index]
+        device_label = str(device.name or device.address)
 
         color_mode_schema = vol.Schema(
             {
@@ -164,6 +181,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="color_mode",
             data_schema=color_mode_schema,
+            description_placeholders={"device_name": device_label},
         )
 
 
@@ -178,31 +196,67 @@ class InvalidAuth(HomeAssistantError):
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle Helvar options flow."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage the options."""
+        # Resolve current per-device color modes from options then data
+        current_color_modes: dict[str, str] = self.config_entry.options.get(
+            CONF_COLOR_MODES,
+            self.config_entry.data.get(CONF_COLOR_MODES, {}),
+        )
+
+        # Get the live router to discover current color devices
+        router = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        color_devices: list = []
+        if router and hasattr(router, "api"):
+            color_devices = [
+                device
+                for device in router.api.devices.devices.values()
+                if device.is_color
+            ]
+
         if user_input is not None:
             # Convert seconds to centiseconds for storage
             fade_seconds = user_input[CONF_FADE_TIME]
-            options = {CONF_FADE_TIME: int(fade_seconds * 100)}
+            options: dict[str, Any] = {CONF_FADE_TIME: int(fade_seconds * 100)}
+
+            # Extract per-device color mode selections
+            new_color_modes: dict[str, str] = {}
+            for device in color_devices:
+                field_key = f"color_mode_{device.address}"
+                if field_key in user_input:
+                    new_color_modes[str(device.address)] = user_input[field_key]
+            if new_color_modes:
+                options[CONF_COLOR_MODES] = new_color_modes
+
             return self.async_create_entry(title="", data=options)
 
         # Convert stored centiseconds back to seconds for display
         current_cs = self.config_entry.options.get(CONF_FADE_TIME, DEFAULT_FADE_TIME)
         current_seconds = current_cs / 100.0
 
-        options_schema = vol.Schema(
-            {
-                vol.Required(CONF_FADE_TIME, default=current_seconds): vol.All(
-                    vol.Coerce(float), vol.Range(min=0, max=100)
-                ),
-            }
-        )
+        schema_fields: dict[Any, Any] = {
+            vol.Required(CONF_FADE_TIME, default=current_seconds): vol.All(
+                vol.Coerce(float), vol.Range(min=0, max=100)
+            ),
+        }
+
+        # Add a color mode selector for each color-capable device
+        for device in color_devices:
+            addr_str = str(device.address)
+            device_label = str(device.name or device.address)
+            current_mode = current_color_modes.get(addr_str, COLOR_MODE_MIREDS)
+            field_key = f"color_mode_{device.address}"
+            schema_fields[
+                vol.Optional(
+                    field_key,
+                    default=current_mode,
+                    description={"suggested_value": current_mode},
+                )
+            ] = vol.In(COLOR_MODE_OPTIONS)
+
+        options_schema = vol.Schema(schema_fields)
 
         return self.async_show_form(
             step_id="init",

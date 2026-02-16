@@ -6,7 +6,10 @@ from unittest.mock import Mock, AsyncMock, MagicMock, patch
 from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode
 
 from custom_components.helvar.group import HelvarGroupLight, async_setup_entry
-from custom_components.helvar.const import DOMAIN as HELVAR_DOMAIN
+from custom_components.helvar.const import (
+    CONF_COLOR_MODES,
+    DOMAIN as HELVAR_DOMAIN,
+)
 
 
 def _make_mock_device(
@@ -59,21 +62,21 @@ class TestHelvarGroupLight:
         """Test unique_id uses group_id."""
         group = _make_mock_group(group_id=5)
         router = _make_mock_router()
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light.unique_id == "helvar-group-5"
 
     def test_name_from_helvar(self):
         """Test name comes from the Helvar group name."""
         group = _make_mock_group(name="Group 5")
         router = _make_mock_router()
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light.name == "Group 5"
 
     def test_name_custom(self):
         """Test custom group name from Helvar."""
         group = _make_mock_group(name="Reception Lights")
         router = _make_mock_router()
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light.name == "Reception Lights"
 
     def test_is_on_when_any_member_on(self):
@@ -85,7 +88,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1, addr2])
         router = _make_mock_router(devices_dict={addr1: dev1, addr2: dev2})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light.is_on is True
 
     def test_is_on_when_all_members_off(self):
@@ -97,7 +100,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1, addr2])
         router = _make_mock_router(devices_dict={addr1: dev1, addr2: dev2})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light.is_on is False
 
     def test_brightness_averages_on_members(self):
@@ -112,7 +115,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1, addr2, addr3])
         router = _make_mock_router(devices_dict={addr1: dev1, addr2: dev2, addr3: dev3})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         # Average of 200 and 100 = 150
         assert light._attr_brightness == 150
 
@@ -123,7 +126,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light._attr_brightness == 0
 
     def test_color_mode_brightness_for_non_color_devices(self):
@@ -133,7 +136,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light._attr_color_mode == ColorMode.BRIGHTNESS
         assert ColorMode.BRIGHTNESS in light._attr_supported_color_modes
 
@@ -144,7 +147,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, "xy", 100)
+        light = HelvarGroupLight(group, router, {addr1: "xy"}, 100)
         assert light._attr_color_mode == ColorMode.XY
         assert ColorMode.XY in light._attr_supported_color_modes
 
@@ -155,7 +158,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, "mireds", 100)
+        light = HelvarGroupLight(group, router, {addr1: "mireds"}, 100)
         assert light._attr_color_mode == ColorMode.COLOR_TEMP
         assert ColorMode.COLOR_TEMP in light._attr_supported_color_modes
 
@@ -166,7 +169,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light._attr_color_mode == ColorMode.ONOFF
         assert ColorMode.ONOFF in light._attr_supported_color_modes
 
@@ -174,21 +177,21 @@ class TestHelvarGroupLight:
         """Test that polling is disabled."""
         group = _make_mock_group()
         router = _make_mock_router()
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light.should_poll is False
 
     def test_has_entity_name(self):
         """Test that has_entity_name is set."""
         group = _make_mock_group()
         router = _make_mock_router()
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light._attr_has_entity_name is True
 
     def test_icon(self):
         """Test group icon."""
         group = _make_mock_group()
         router = _make_mock_router()
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         assert light._attr_icon == "mdi:lightbulb-group"
 
     def test_missing_member_devices_skipped(self):
@@ -199,7 +202,7 @@ class TestHelvarGroupLight:
         group = _make_mock_group(device_addresses=[addr1, addr_missing])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         members = light._get_member_devices()
         assert len(members) == 1
         assert members[0] is dev1
@@ -216,7 +219,7 @@ class TestHelvarGroupLightControl:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         await light.async_turn_on(**{ATTR_BRIGHTNESS: 200})
 
         router.api.groups.set_group_level.assert_called_once_with(
@@ -233,7 +236,7 @@ class TestHelvarGroupLightControl:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         await light.async_turn_on()
 
         router.api.groups.set_group_level.assert_called_once_with(
@@ -250,7 +253,7 @@ class TestHelvarGroupLightControl:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         await light.async_turn_off()
 
         router.api.groups.set_group_level.assert_called_once_with(
@@ -273,7 +276,7 @@ class TestHelvarGroupLightSubscriptions:
         group = _make_mock_group(device_addresses=[addr1, addr2])
         router = _make_mock_router(devices_dict={addr1: dev1, addr2: dev2})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         light.hass = Mock()
         light.async_write_ha_state = Mock()
 
@@ -294,7 +297,7 @@ class TestHelvarGroupLightSubscriptions:
         group = _make_mock_group(group_id=5)
         router = _make_mock_router()
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         light.hass = Mock()
         light.async_write_ha_state = Mock()
 
@@ -312,7 +315,7 @@ class TestHelvarGroupLightSubscriptions:
         group = _make_mock_group(device_addresses=[addr1])
         router = _make_mock_router(devices_dict={addr1: dev1})
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         light.hass = Mock()
         light.async_write_ha_state = Mock()
 
@@ -332,7 +335,7 @@ class TestHelvarGroupLightSubscriptions:
         group = _make_mock_group(group_id=5)
         router = _make_mock_router()
 
-        light = HelvarGroupLight(group, router, None, 100)
+        light = HelvarGroupLight(group, router, {}, 100)
         light.hass = Mock()
         light.async_write_ha_state = Mock()
 

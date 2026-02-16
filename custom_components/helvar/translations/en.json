@@ -17,8 +17,8 @@
         }
       },
       "color_mode": {
-        "title": "Color control mode",
-        "description": "Color control lights were detected. Select how they should be controlled.",
+        "title": "Color control mode for {device_name}",
+        "description": "Select how this color control light should be controlled.",
         "data": {
           "color_mode": "Color mode"
         }

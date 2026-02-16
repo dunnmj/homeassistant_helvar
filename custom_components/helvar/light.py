@@ -18,12 +18,12 @@ from homeassistant.util import color as color_util
 from .const import (
     COLOR_MODE_MIREDS,
     COLOR_MODE_XY,
-    CONF_COLOR_MODE,
+    CONF_COLOR_MODES,
     CONF_FADE_TIME,
     DEFAULT_FADE_TIME,
     DOMAIN as HELVAR_DOMAIN,
 )
-from .group import async_setup_entry as setup_groups_entry
+from .group import create_group_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,21 +35,28 @@ async def async_setup_platform(hass, config, add_entities, discovery_info=None):
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up Helvar lights from a config entry."""
     router = hass.data[HELVAR_DOMAIN][config_entry.entry_id]
-    configured_color_mode = config_entry.data.get(CONF_COLOR_MODE)
+    # Per-device color modes: options override data
+    color_modes: dict[str, str] = config_entry.options.get(
+        CONF_COLOR_MODES, config_entry.data.get(CONF_COLOR_MODES, {})
+    )
     fade_time = config_entry.options.get(CONF_FADE_TIME, DEFAULT_FADE_TIME)
 
-    # Create individual light entities first so they are registered
-    # in the entity registry before group entities reference them
     devices = [
-        HelvarLight(device, router, configured_color_mode, fade_time)
+        HelvarLight(device, router, color_modes.get(str(device.address)), fade_time)
         for device in router.api.devices.get_light_devices()
     ]
+    groups = create_group_entities(router, color_modes, fade_time)
 
-    _LOGGER.info("Adding %s helvar device lights", len(devices))
-    async_add_entities(devices)
+    _LOGGER.info(
+        "Adding %s helvar device lights and %s group lights",
+        len(devices),
+        len(groups),
+    )
 
-    # Set up group lights after individual lights are registered
-    await setup_groups_entry(hass, config_entry, async_add_entities)
+    # Add all entities in a single batch with individual lights first,
+    # so they are registered in the entity registry before group
+    # entities look up member entity IDs in their attributes.
+    async_add_entities([*devices, *groups])
 
 
 class HelvarLight(LightEntity):
@@ -106,18 +113,18 @@ class HelvarLight(LightEntity):
     @property
     def supported_color_modes(self) -> set[ColorMode]:
         """Return supported color modes."""
-        if self.device.is_color and self._configured_color_mode == COLOR_MODE_XY:
-            return {ColorMode.XY}
-        if self.device.is_color and self._configured_color_mode == COLOR_MODE_MIREDS:
+        if self.device.is_color:
+            if self._configured_color_mode == COLOR_MODE_XY:
+                return {ColorMode.XY}
             return {ColorMode.COLOR_TEMP}
         return {ColorMode.BRIGHTNESS}
 
     @property
     def color_mode(self) -> ColorMode:
         """Return the active color mode."""
-        if self.device.is_color and self._configured_color_mode == COLOR_MODE_XY:
-            return ColorMode.XY
-        if self.device.is_color and self._configured_color_mode == COLOR_MODE_MIREDS:
+        if self.device.is_color:
+            if self._configured_color_mode == COLOR_MODE_XY:
+                return ColorMode.XY
             return ColorMode.COLOR_TEMP
         return ColorMode.BRIGHTNESS
 

@@ -2,10 +2,20 @@
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
-from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode
+from homeassistant.components.light import (
+    ATTR_BRIGHTNESS,
+    ATTR_COLOR_TEMP_KELVIN,
+    ATTR_XY_COLOR,
+    ColorMode,
+)
 
 from custom_components.helvar.light import HelvarLight, async_setup_entry
-from custom_components.helvar.const import DOMAIN as HELVAR_DOMAIN
+from custom_components.helvar.const import (
+    COLOR_MODE_MIREDS,
+    COLOR_MODE_XY,
+    CONF_COLOR_MODES,
+    DOMAIN as HELVAR_DOMAIN,
+)
 
 
 class TestHelvarLight:
@@ -45,17 +55,75 @@ class TestHelvarLight:
         light = HelvarLight(mock_device, mock_router, None, 100)
         assert light.is_on is False
 
-    def test_supported_color_modes(self, mock_device, mock_router):
-        """Test supported_color_modes property."""
+    def test_supported_color_modes_brightness_only(self, mock_device, mock_router):
+        """Test supported_color_modes for non-color devices."""
         mock_device.is_color = False
         light = HelvarLight(mock_device, mock_router, None, 100)
         assert light.supported_color_modes == {ColorMode.BRIGHTNESS}
 
-    def test_color_mode(self, mock_device, mock_router):
-        """Test color_mode property."""
+    def test_color_mode_brightness_only(self, mock_device, mock_router):
+        """Test color_mode for non-color devices."""
         mock_device.is_color = False
         light = HelvarLight(mock_device, mock_router, None, 100)
         assert light.color_mode == ColorMode.BRIGHTNESS
+
+    def test_color_device_defaults_to_color_temp(self, mock_device, mock_router):
+        """Test that a color device defaults to COLOR_TEMP when no mode configured."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, None, 100)
+        assert light.supported_color_modes == {ColorMode.COLOR_TEMP}
+        assert light.color_mode == ColorMode.COLOR_TEMP
+
+    def test_color_device_with_mireds_configured(self, mock_device, mock_router):
+        """Test color device with mireds explicitly configured."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_MIREDS, 100)
+        assert light.supported_color_modes == {ColorMode.COLOR_TEMP}
+        assert light.color_mode == ColorMode.COLOR_TEMP
+
+    def test_color_device_with_xy_configured(self, mock_device, mock_router):
+        """Test color device with XY color mode configured."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_XY, 100)
+        assert light.supported_color_modes == {ColorMode.XY}
+        assert light.color_mode == ColorMode.XY
+
+    def test_non_color_device_ignores_configured_mode(self, mock_device, mock_router):
+        """Test non-color device ignores configured color mode."""
+        mock_device.is_color = False
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_XY, 100)
+        assert light.supported_color_modes == {ColorMode.BRIGHTNESS}
+        assert light.color_mode == ColorMode.BRIGHTNESS
+
+    def test_color_temp_kelvin_property(self, mock_device, mock_router):
+        """Test color_temp_kelvin returns value when in COLOR_TEMP mode."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_MIREDS, 100)
+        light._attr_color_temp_kelvin = 4000
+        assert light.color_temp_kelvin == 4000
+
+    def test_color_temp_kelvin_none_when_not_color_temp_mode(
+        self, mock_device, mock_router
+    ):
+        """Test color_temp_kelvin returns None when not in COLOR_TEMP mode."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_XY, 100)
+        light._attr_color_temp_kelvin = 4000
+        assert light.color_temp_kelvin is None
+
+    def test_xy_color_property(self, mock_device, mock_router):
+        """Test xy_color returns value when in XY mode."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_XY, 100)
+        light._attr_xy_color = (0.3, 0.5)
+        assert light.xy_color == (0.3, 0.5)
+
+    def test_xy_color_none_when_not_xy_mode(self, mock_device, mock_router):
+        """Test xy_color returns None when not in XY mode."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_MIREDS, 100)
+        light._attr_xy_color = (0.3, 0.5)
+        assert light.xy_color is None
 
     @pytest.mark.asyncio
     async def test_async_turn_on_with_brightness(self, mock_device, mock_router):
@@ -78,6 +146,32 @@ class TestHelvarLight:
         mock_router.api.devices.set_device_brightness.assert_called_once_with(
             mock_device.address, 255, fade_time=100
         )
+
+    @pytest.mark.asyncio
+    async def test_async_turn_on_with_color_temp(self, mock_device, mock_router):
+        """Test turning on with color temperature."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_MIREDS, 100)
+
+        await light.async_turn_on(
+            **{ATTR_BRIGHTNESS: 200, ATTR_COLOR_TEMP_KELVIN: 4000}
+        )
+
+        mock_router.api.devices.set_device_colour_temperature.assert_called_once()
+        call_args = mock_router.api.devices.set_device_colour_temperature.call_args
+        assert call_args[0][0] == mock_device.address  # address
+        assert light._attr_color_temp_kelvin == 4000
+
+    @pytest.mark.asyncio
+    async def test_async_turn_on_with_xy_color(self, mock_device, mock_router):
+        """Test turning on with XY color."""
+        mock_device.is_color = True
+        light = HelvarLight(mock_device, mock_router, COLOR_MODE_XY, 100)
+
+        await light.async_turn_on(**{ATTR_BRIGHTNESS: 200, ATTR_XY_COLOR: (0.3, 0.5)})
+
+        mock_router.api.devices.set_device_xy_color.assert_called_once()
+        assert light._attr_xy_color == (0.3, 0.5)
 
     @pytest.mark.asyncio
     async def test_async_turn_off(self, mock_device, mock_router):
@@ -173,8 +267,113 @@ class TestAsyncSetupEntry:
         assert len(mock_add_entities.call_args_list[0][0][0]) == 0
         assert len(mock_add_entities.call_args_list[1][0][0]) == 0
 
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_color_mode_from_options(
+        self, mock_hass, mock_config_entry, mock_add_entities, mock_router
+    ):
+        """Test that color mode from options overrides data."""
+        mock_device = Mock()
+        mock_device.address = "1.2.3.4"
+        mock_device.name = "Color Light"
+        mock_device.brightness = 128
+        mock_device.is_color = True
 
-class TestHelvarLightIntegration:
+        mock_router.api.devices.get_light_devices.return_value = [mock_device]
+
+        mock_hass.data = {HELVAR_DOMAIN: {mock_config_entry.entry_id: mock_router}}
+        # Data says mireds, but options says XY — options should win
+        mock_config_entry.data = {CONF_COLOR_MODES: {"1.2.3.4": COLOR_MODE_MIREDS}}
+        mock_config_entry.options = {CONF_COLOR_MODES: {"1.2.3.4": COLOR_MODE_XY}}
+
+        await async_setup_entry(mock_hass, mock_config_entry, mock_add_entities)
+
+        device_entities = mock_add_entities.call_args_list[0][0][0]
+        assert len(device_entities) == 1
+        light = device_entities[0]
+        assert light.color_mode == ColorMode.XY
+
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_color_mode_from_data_fallback(
+        self, mock_hass, mock_config_entry, mock_add_entities, mock_router
+    ):
+        """Test that color mode falls back to data when not in options."""
+        mock_device = Mock()
+        mock_device.address = "1.2.3.4"
+        mock_device.name = "Color Light"
+        mock_device.brightness = 128
+        mock_device.is_color = True
+
+        mock_router.api.devices.get_light_devices.return_value = [mock_device]
+
+        mock_hass.data = {HELVAR_DOMAIN: {mock_config_entry.entry_id: mock_router}}
+        mock_config_entry.data = {CONF_COLOR_MODES: {"1.2.3.4": COLOR_MODE_XY}}
+        mock_config_entry.options = {}
+
+        await async_setup_entry(mock_hass, mock_config_entry, mock_add_entities)
+
+        device_entities = mock_add_entities.call_args_list[0][0][0]
+        light = device_entities[0]
+        assert light.color_mode == ColorMode.XY
+
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_color_device_no_mode_defaults_to_color_temp(
+        self, mock_hass, mock_config_entry, mock_add_entities, mock_router
+    ):
+        """Test color device defaults to COLOR_TEMP when no mode configured."""
+        mock_device = Mock()
+        mock_device.address = "1.2.3.4"
+        mock_device.name = "Color Light"
+        mock_device.brightness = 128
+        mock_device.is_color = True
+
+        mock_router.api.devices.get_light_devices.return_value = [mock_device]
+
+        mock_hass.data = {HELVAR_DOMAIN: {mock_config_entry.entry_id: mock_router}}
+        mock_config_entry.data = {}  # No color mode configured
+        mock_config_entry.options = {}
+
+        await async_setup_entry(mock_hass, mock_config_entry, mock_add_entities)
+
+        device_entities = mock_add_entities.call_args_list[0][0][0]
+        light = device_entities[0]
+        # Should default to COLOR_TEMP, not BRIGHTNESS
+        assert light.color_mode == ColorMode.COLOR_TEMP
+        assert light.supported_color_modes == {ColorMode.COLOR_TEMP}
+
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_mixed_per_device_color_modes(
+        self, mock_hass, mock_config_entry, mock_add_entities, mock_router
+    ):
+        """Test different color modes for different devices."""
+        dev_xy = Mock()
+        dev_xy.address = "1.2.3.4"
+        dev_xy.name = "XY Light"
+        dev_xy.brightness = 128
+        dev_xy.is_color = True
+
+        dev_mireds = Mock()
+        dev_mireds.address = "1.2.3.5"
+        dev_mireds.name = "Mireds Light"
+        dev_mireds.brightness = 128
+        dev_mireds.is_color = True
+
+        mock_router.api.devices.get_light_devices.return_value = [dev_xy, dev_mireds]
+
+        mock_hass.data = {HELVAR_DOMAIN: {mock_config_entry.entry_id: mock_router}}
+        mock_config_entry.data = {
+            CONF_COLOR_MODES: {"1.2.3.4": COLOR_MODE_XY, "1.2.3.5": COLOR_MODE_MIREDS}
+        }
+        mock_config_entry.options = {}
+
+        await async_setup_entry(mock_hass, mock_config_entry, mock_add_entities)
+
+        device_entities = mock_add_entities.call_args_list[0][0][0]
+        assert len(device_entities) == 2
+        xy_light = device_entities[0]
+        mireds_light = device_entities[1]
+        assert xy_light.color_mode == ColorMode.XY
+        assert mireds_light.color_mode == ColorMode.COLOR_TEMP
+
     """Integration tests for HelvarLight."""
 
     @pytest.mark.asyncio

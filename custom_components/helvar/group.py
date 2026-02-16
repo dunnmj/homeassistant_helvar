@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import aiohelvar
@@ -19,31 +18,19 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import color as color_util
 
 from .const import (
-    COLOR_MODE_MIREDS,
     COLOR_MODE_XY,
-    CONF_COLOR_MODE,
-    CONF_FADE_TIME,
-    DEFAULT_FADE_TIME,
     DOMAIN as HELVAR_DOMAIN,
 )
 
-_LOGGER = logging.getLogger(__name__)
 
-
-async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up Helvar group lights from a config entry."""
-    router = hass.data[HELVAR_DOMAIN][config_entry.entry_id]
-    configured_color_mode = config_entry.data.get(CONF_COLOR_MODE)
-    fade_time = config_entry.options.get(CONF_FADE_TIME, DEFAULT_FADE_TIME)
-
-    groups = [
-        HelvarGroupLight(group, router, configured_color_mode, fade_time)
+def create_group_entities(
+    router, color_modes: dict[str, str], fade_time: int
+) -> list[HelvarGroupLight]:
+    """Create Helvar group light entities."""
+    return [
+        HelvarGroupLight(group, router, color_modes, fade_time)
         for group in router.api.groups.groups.values()
     ]
-
-    _LOGGER.info("Adding %s helvar group lights", len(groups))
-
-    async_add_entities(groups)
 
 
 class HelvarGroupLight(LightEntity):
@@ -54,20 +41,19 @@ class HelvarGroupLight(LightEntity):
     """
 
     _attr_should_poll = False
-    _attr_has_entity_name = True
     _attr_icon = "mdi:lightbulb-group"
 
     def __init__(
         self,
         group: aiohelvar.groups.Group,
         router,
-        configured_color_mode: str | None,
+        color_modes: dict[str, str],
         fade_time: int,
     ):
         """Initialize a Helvar group light."""
         self.router = router
         self.group = group
-        self._configured_color_mode = configured_color_mode
+        self._color_modes = color_modes
         self._fade_time = fade_time
         self._attr_color_temp_kelvin: int | None = None
         self._attr_xy_color: tuple[float, float] | None = None
@@ -122,9 +108,11 @@ class HelvarGroupLight(LightEntity):
 
         for device in members:
             if device.is_color:
-                if self._configured_color_mode == COLOR_MODE_XY:
+                device_mode = self._color_modes.get(str(device.address))
+                if device_mode == COLOR_MODE_XY:
                     supported_color_modes.add(ColorMode.XY)
-                if self._configured_color_mode == COLOR_MODE_MIREDS:
+                else:
+                    # Default to COLOR_TEMP for color devices
                     supported_color_modes.add(ColorMode.COLOR_TEMP)
             if device.is_load:
                 has_dimming = True

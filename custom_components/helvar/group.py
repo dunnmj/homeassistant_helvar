@@ -15,9 +15,10 @@ from homeassistant.components.light import (
 )
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
-from homeassistant.util import color as color_util
+from homeassistant.util import color as color_util, slugify
 
 from .const import (
+    COLOR_MODE_NONE,
     COLOR_MODE_XY,
     DOMAIN as HELVAR_DOMAIN,
 )
@@ -59,6 +60,12 @@ class HelvarGroupLight(LightEntity):
         self._attr_xy_color: tuple[float, float] | None = None
         self._attr_brightness: int | None = None
 
+        # Derive entity_id from the Helvar group name so it matches the display
+        # name rather than the unique_id slug. This overrides any stale entity_id
+        # stored in the entity registry from before group names were loaded.
+        if group.name:
+            self.entity_id = f"light.{slugify(group.name)}_group"
+
         # Compute supported color modes from member capabilities
         self._update_values()
 
@@ -84,7 +91,7 @@ class HelvarGroupLight(LightEntity):
             self.router.api.devices.register_subscription(addr, async_member_callback)
 
         # Subscribe to group-level updates (scene recalls, etc.)
-        async def async_group_callback():
+        async def async_group_callback(group):
             """Handle group-level state change."""
             self._update_values()
             self.async_write_ha_state()
@@ -109,7 +116,10 @@ class HelvarGroupLight(LightEntity):
         for device in members:
             if device.is_color:
                 device_mode = self._color_modes.get(str(device.address))
-                if device_mode == COLOR_MODE_XY:
+                if device_mode == COLOR_MODE_NONE:
+                    # Treat this color device as brightness-only per user config
+                    pass
+                elif device_mode == COLOR_MODE_XY:
                     supported_color_modes.add(ColorMode.XY)
                 else:
                     # Default to COLOR_TEMP for color devices

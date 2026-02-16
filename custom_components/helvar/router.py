@@ -41,7 +41,7 @@ class HelvarRouter:
 
         try:
             await router.connect()
-            await router.initialize(discover_cluster=True, lights_only=True)
+            await router.initialize(discover_cluster=True, lights_only=False)
 
         except ConnectionError as err:
             _LOGGER.error("Error connecting to the Helvar router at %s", host)

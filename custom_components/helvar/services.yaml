@@ -1,0 +1,25 @@
+send_command:
+  name: Send command
+  description: >
+    Send a raw HelvarNet ASCII command to a Helvar router.
+    The command will have the leading '>' and trailing '#' added automatically
+    if they are not included.
+  fields:
+    command:
+      name: Command
+      description: >
+        The HelvarNet ASCII command string, for example
+        '>V:1,C:13,G:1,L:50,F:100#' to set group 1 to 50% over 1 second.
+      required: true
+      example: ">V:1,C:13,G:1,L:50,F:100#"
+      selector:
+        text:
+    host:
+      name: Router host
+      description: >
+        IP address or hostname of the target router. If omitted, the command
+        is sent to all configured routers.
+      required: false
+      example: "192.168.1.100"
+      selector:
+        text:

@@ -13,10 +13,12 @@ from homeassistant.components.light import (
     ColorMode,
     LightEntity,
 )
-from homeassistant.util import color as color_util
+from homeassistant.helpers import entity_registry as er
+from homeassistant.util import color as color_util, slugify
 
 from .const import (
     COLOR_MODE_MIREDS,
+    COLOR_MODE_NONE,
     COLOR_MODE_XY,
     CONF_COLOR_MODES,
     CONF_FADE_TIME,
@@ -46,6 +48,35 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for device in router.api.devices.get_light_devices()
     ]
     groups = create_group_entities(router, color_modes, fade_time)
+
+    # Migrate stale group entity_ids before adding entities.
+    # We do this now, while nothing is in the state machine yet, because
+    # async_update_entity requires the target entity_id to be absent from
+    # both the registry and the live state machine.
+    ent_reg = er.async_get(hass)
+    for group_entity in groups:
+        if group_entity.group.name:
+            desired_id = f"light.{slugify(group_entity.group.name)}_group"
+            current_id = ent_reg.async_get_entity_id(
+                "light", HELVAR_DOMAIN, group_entity.unique_id
+            )
+            if current_id and current_id != desired_id:
+                try:
+                    ent_reg.async_update_entity(current_id, new_entity_id=desired_id)
+                    _LOGGER.debug(
+                        "Renamed group entity %s -> %s", current_id, desired_id
+                    )
+                except ValueError:
+                    # desired_id already taken by another entity — remove the stale
+                    # entry so async_get_or_create re-registers it from the group
+                    # name suggestion, auto-suffixing (_2, _3 …) if still needed.
+                    _LOGGER.debug(
+                        "Could not rename group entity %s to %s (conflict); "
+                        "removing stale entry for re-registration",
+                        current_id,
+                        desired_id,
+                    )
+                    ent_reg.async_remove(current_id)
 
     _LOGGER.info(
         "Adding %s helvar device lights and %s group lights",
@@ -116,6 +147,8 @@ class HelvarLight(LightEntity):
         if self.device.is_color:
             if self._configured_color_mode == COLOR_MODE_XY:
                 return {ColorMode.XY}
+            if self._configured_color_mode == COLOR_MODE_NONE:
+                return {ColorMode.BRIGHTNESS}
             return {ColorMode.COLOR_TEMP}
         return {ColorMode.BRIGHTNESS}
 
@@ -125,6 +158,8 @@ class HelvarLight(LightEntity):
         if self.device.is_color:
             if self._configured_color_mode == COLOR_MODE_XY:
                 return ColorMode.XY
+            if self._configured_color_mode == COLOR_MODE_NONE:
+                return ColorMode.BRIGHTNESS
             return ColorMode.COLOR_TEMP
         return ColorMode.BRIGHTNESS
 

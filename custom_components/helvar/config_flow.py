@@ -16,6 +16,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     COLOR_MODE_MIREDS,
+    COLOR_MODE_NONE,
     COLOR_MODE_XY,
     CONF_COLOR_MODE,
     CONF_COLOR_MODES,
@@ -39,6 +40,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 COLOR_MODE_OPTIONS = {
     COLOR_MODE_MIREDS: "Mireds (color temperature)",
     COLOR_MODE_XY: "CX/CY (XY color space)",
+    COLOR_MODE_NONE: "Brightness only (no color)",
 }
 
 

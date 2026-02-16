@@ -8,6 +8,7 @@ CONF_COLOR_MODE = "color_mode"
 CONF_COLOR_MODES = "color_modes"
 CONF_FADE_TIME = "fade_time"
 
+COLOR_MODE_NONE = "none"
 COLOR_MODE_MIREDS = "mireds"
 COLOR_MODE_XY = "xy"
 

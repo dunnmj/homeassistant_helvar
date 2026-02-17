@@ -124,7 +124,7 @@ class HelvarGroupLight(LightEntity):
                 else:
                     # Default to COLOR_TEMP for color devices
                     supported_color_modes.add(ColorMode.COLOR_TEMP)
-            if device.is_load:
+            if device.is_load and not device.is_switch:
                 has_dimming = True
                 if device.load_level > 0:
                     on_brightness_total += device.brightness
@@ -196,6 +196,7 @@ class HelvarGroupLight(LightEntity):
         light_names, light_entities = self._get_member_names_and_entity_ids()
         return {
             "is_helvar_group": True,
+            "helvar_group_id": self.group.group_id,
             "lights": light_names,
             "entity_id": light_entities,
         }

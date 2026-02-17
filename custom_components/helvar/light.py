@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import aiohelvar
 
@@ -132,18 +133,27 @@ class HelvarLight(LightEntity):
         return self.device.name
 
     @property
-    def brightness(self):
+    def brightness(self) -> int | None:
         """Return the brightness of the light."""
+        if self.device.is_switch:
+            return None
         return self.device.brightness
 
     @property
-    def is_on(self):
+    def is_on(self) -> bool:
         """Return true if light is on."""
-        return self.brightness > 0
+        return self.device.load_level > 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the Helvar device address as a state attribute."""
+        return {"helvar_address": str(self.device.address)}
 
     @property
     def supported_color_modes(self) -> set[ColorMode]:
         """Return supported color modes."""
+        if self.device.is_switch:
+            return {ColorMode.ONOFF}
         if self.device.is_color:
             if self._configured_color_mode == COLOR_MODE_XY:
                 return {ColorMode.XY}
@@ -155,6 +165,8 @@ class HelvarLight(LightEntity):
     @property
     def color_mode(self) -> ColorMode:
         """Return the active color mode."""
+        if self.device.is_switch:
+            return ColorMode.ONOFF
         if self.device.is_color:
             if self._configured_color_mode == COLOR_MODE_XY:
                 return ColorMode.XY
@@ -179,6 +191,13 @@ class HelvarLight(LightEntity):
 
     async def async_turn_on(self, **kwargs):
         """Turn the light on with optional brightness and color."""
+        if self.device.is_switch:
+            # Switching function devices only support ON/OFF — always send 100%
+            await self.router.api.devices.set_device_brightness(
+                self.device.address, 255, fade_time=self._fade_time
+            )
+            return
+
         brightness = kwargs.get(ATTR_BRIGHTNESS, 255)
         level = f"{((brightness / 255) * 100):.1f}"
 

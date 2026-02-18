@@ -79,6 +79,31 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                     )
                     ent_reg.async_remove(current_id)
 
+    # Migrate stale device entity_ids before adding entities.
+    # Previously, when device names weren't loaded at registration time,
+    # HA generated entity_ids from the unique_id (e.g. light.helvar_110_9_2_5_light).
+    # Now that names are always available, rename those to name-based IDs.
+    for device_entity in devices:
+        if device_entity.device.name:
+            desired_id = f"light.{slugify(device_entity.device.name)}"
+            current_id = ent_reg.async_get_entity_id(
+                "light", HELVAR_DOMAIN, device_entity.unique_id
+            )
+            if current_id and current_id != desired_id:
+                try:
+                    ent_reg.async_update_entity(current_id, new_entity_id=desired_id)
+                    _LOGGER.debug(
+                        "Renamed device entity %s -> %s", current_id, desired_id
+                    )
+                except ValueError:
+                    _LOGGER.debug(
+                        "Could not rename device entity %s to %s (conflict); "
+                        "removing stale entry for re-registration",
+                        current_id,
+                        desired_id,
+                    )
+                    ent_reg.async_remove(current_id)
+
     _LOGGER.info(
         "Adding %s helvar device lights and %s group lights",
         len(devices),
